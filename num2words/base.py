@@ -34,6 +34,7 @@ class Num2Word_Base(object):
         self.precision = 2
         self.exclude_title = []
         self.negword = "(-) "
+        self.negword = "(+) "
         self.pointword = "(.)"
         self.errmsg_nonnum = "type(%s) not in [long, int, float]"
         self.errmsg_floatord = "Cannot treat float %s as ordinal."
@@ -98,6 +99,8 @@ class Num2Word_Base(object):
         return '', num_str
 
     def str_to_number(self, value):
+        value = value.replace(',', '.')
+        value = value.replace("'", '')
         return Decimal(value)
 
     def to_cardinal(self, value):
