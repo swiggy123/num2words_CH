@@ -87,7 +87,31 @@ class Num2Word_CH_BS(Num2Word_EU):
                      "zäh":"zähn",
                      "ärd": "ärds",
                      "rdä": "rdäs"}
-
+        
+        self.minutes = {5: "fünf ab",
+                        10: "zäh ab",
+                        15: "viertl ab",
+                        20: "zwanzig ab",
+                        25: "fünf vor halb",
+                        30: "halb",
+                        35: "fünf nach halb",
+                        40: "zwanzig vor",
+                        45: "viertl vor",
+                        50: "zäh vor",
+                        55: "fünf vor"}
+        self.hours = {1: "eis",
+                      2: "zwei",
+                        3: "drei",
+                        4: "vieri",
+                        5: "fünfi",
+                        6: "sechsi",
+                        7: "sibni",
+                        8: "achti", 
+                        9: "nüni",
+                        10: "zähni",
+                        11: "elfi",
+                        12: "zwölfi"}
+        
     def merge(self, curr, next):
         ctext, cnum, ntext, nnum = curr + next
 
@@ -127,7 +151,7 @@ class Num2Word_CH_BS(Num2Word_EU):
                 outword = outword[:len(outword) - len(key)] + self.ords[key]
                 break
 
-        res = outword + "ti"
+        res = outword + "t"
 
         # Exception: "hundertste" is usually preferred over "einhundertste"
         if res == "eitusigssti" or (res == "eihundärdsti"):
@@ -152,8 +176,17 @@ class Num2Word_CH_BS(Num2Word_EU):
             val, currency=currency, cents=cents, separator=separator,
             adjective=adjective)
         # Handle exception, in german is "ein Euro" and not "eins Euro"
-        return result.replace("eins ", "ei ")
-
+        return result.replace("eis ", "ei ")
+    def to_minutes(self, val):
+        if val in self.minutes:
+            return self.minutes[val]
+    def to_hours(self, val):
+        if val in self.hours:
+            return self.hours[val]
+    def to_lookup(self, val):
+        if val == "sek":
+            return "sekunde"
+    
     def to_year(self, val, longval=True):
         if not (val // 100) % 10:
             return self.to_cardinal(val)
