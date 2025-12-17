@@ -30,7 +30,7 @@ CONVERTER_CLASSES = {
     "ch_bs":lang_CH_BS.Num2Word_CH_BS(),
 }
 
-CONVERTES_TYPES = ['cardinal', 'ordinal', 'ordinal_num', 'year', 'currency', "minutes", "hours","lookup"]
+CONVERTES_TYPES = ['cardinal', 'ordinal', 'ordinal_num', 'year', 'currency', "minutes", "hours","lookup","month_dates"]
 
 
 def num2words(number, ordinal=False, lang='en', to='cardinal', **kwargs):

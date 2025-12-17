@@ -16,6 +16,7 @@
 # MA 02110-1301 USA
 
 from __future__ import print_function, unicode_literals
+import pandas as pd
 
 import re
 
@@ -35,6 +36,10 @@ class Num2Word_CH_BS(Num2Word_EU):
     MEGA_SUFFIX = "illion"
 
     def setup(self):
+        self.ordinal_declension = pd.read_excel("./helper_data/numbers_helper.xlsx", sheet_name="Ordinal_deklination")[["Deklination","Genus","Kasus", "Basel_short"]]
+        self.ordinal_declension.fillna("", inplace=True)
+        self.ordinal_declension["Kasus"] = self.ordinal_declension["Kasus"].apply(str.lower)
+        
         self.negword = "minus "
         self.posword = "plus "
         self.pointword = "Komma"
@@ -88,17 +93,12 @@ class Num2Word_CH_BS(Num2Word_EU):
                      "ärd": "ärds",
                      "rdä": "rdäs"}
         
-        self.minutes = {5: "fünf ab",
-                        10: "zäh ab",
+        self.minutes = {
                         15: "viertl ab",
-                        20: "zwanzig ab",
                         25: "fünf vor halb",
                         30: "halb",
-                        35: "fünf nach halb",
-                        40: "zwanzig vor",
-                        45: "viertl vor",
-                        50: "zäh vor",
-                        55: "fünf vor"}
+                        35: "fünf ab halb",
+                        45: "viertl vor"}
         self.hours = {1: "eis",
                       2: "zwei",
                         3: "drei",
@@ -111,6 +111,19 @@ class Num2Word_CH_BS(Num2Word_EU):
                         10: "zähni",
                         11: "elfi",
                         12: "zwölfi"}
+        self.month_dates = {
+            1: "Januar",
+            2: "Februar",
+            3: "März",
+            4: "April",
+            5: "Mai",
+            6: "Juni",
+            7: "Juli",
+            8: "August",
+            9: "Septämber",
+            10: "Oktober",
+            11: "Novämber",
+            12: "Dezämber"}
         
     def merge(self, curr, next):
         ctext, cnum, ntext, nnum = curr + next
@@ -143,16 +156,15 @@ class Num2Word_CH_BS(Num2Word_EU):
         word = ctext + ntext
         return (word, val)
 
-    def to_ordinal(self, value):
+    def to_ordinal(self, value, declension):
         self.verify_ordinal(value)
         outword = self.to_cardinal(value).lower()
         for key in self.ords:
             if outword.endswith(key):
                 outword = outword[:len(outword) - len(key)] + self.ords[key]
                 break
-
-        res = outword + "t"
-
+        mask = (self.ordinal_declension["Deklination"] == declension["declension"]) & (self.ordinal_declension["Genus"] == declension["gender"]) & (self.ordinal_declension["Kasus"] == declension["case"])
+        res = outword + "t" + self.ordinal_declension[mask]["Basel_short"].values[0]
         # Exception: "hundertste" is usually preferred over "einhundertste"
         if res == "eitusigssti" or (res == "eihundärdsti"):
             res = res.replace("ei", "", 1)
@@ -180,9 +192,17 @@ class Num2Word_CH_BS(Num2Word_EU):
     def to_minutes(self, val):
         if val in self.minutes:
             return self.minutes[val]
+        elif val < 30:
+            return self.to_cardinal(val) + "ab"
+        elif (val > 30) and (val < 60):
+            return self.to_cardinal(60 - val) + "vor"
     def to_hours(self, val):
         if val in self.hours:
             return self.hours[val]
+    def to_month_dates(self, val):
+        if val in self.month_dates:
+            return self.month_dates[val]
+
     def to_lookup(self, val):
         if val == "sek":
             return "sekunde"

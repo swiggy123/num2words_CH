@@ -1,6 +1,6 @@
 import re
 from dataclasses import dataclass
-from typing import List, Literal, Optional
+from typing import List, Literal, Optional, Dict
 import pandas as pd
 import spacy
 from num2words.num2words_CH import num2words
@@ -21,22 +21,37 @@ class NumberSpan:
     end: int
     value: Optional[str] = None
 
-def extract_time_from_timex(timex_value: str):
-    """
-    Returns a dict with hour, minute, second (which may be None)
-    if a time is present; otherwise returns None.
-    """
-    m = re.search(r"T(\d{2}):(\d{2})(?::(\d{2}))?", timex_value)
-    if not m:
-        return None
-    
-    return {
-        "hour": int(m.group(1)),
-        "minute": int(m.group(2)),
-        "second": int(m.group(3)) if m.group(3) else None
-    }
 
-# --- regexes as before (shortened here) ---
+DATE_PATTERN = re.compile(
+    r"""
+    (?P<YEAR>\d{4}|XXXX)      # year
+    -
+    (?P<MONTH>\d{0,2}|XX)       # month
+    -
+    (?P<DAY>\d{0,2}|XX)       # day (can be missing or cut off)
+    """,
+    re.VERBOSE
+)
+
+def extract_date_parts(value: str) -> Dict[str, Optional[int]]:
+    if len(value) == 4:
+        value += "-XX-XX"
+    if len(value) == 7:
+        value += "-XX"
+    match = DATE_PATTERN.search(value)
+    if not match:
+        return {"YEAR": None, "MONTH": None, "DAY": None}
+
+    def parse(part):
+        if part in (None, "", "XX", "XXXX"):
+            return None
+        return int(part)
+
+    return {
+        "YEAR": parse(match.group("YEAR")),
+        "MONTH": parse(match.group("MONTH")),
+        "DAY": parse(match.group("DAY")),
+    }
 
 YEAR_RE = re.compile(r"\b(1[5-9]\d{2}|20\d{2})\b")
 ZIP_RE_RAW = re.compile(r"\b[1-9]\d{3}\b")
@@ -83,7 +98,7 @@ MONEY_RE = re.compile(
 MODEL_RE = re.compile(
     r"\b(?=[A-Za-z0-9_-]*[A-Za-z])(?=[A-Za-z0-9_-]*\d)[A-Za-z0-9_-]{3,}\b"
 )
-PLAIN_NUMBER_RE = re.compile(r"\b\d+(?:[’']\d{3})*(?:[.,]\d+)?\b")
+PLAIN_NUMBER_RE = re.compile(r"\d+(?:[’']\d{3})*(?:[.,]\d+)?")
 
 SWISS_PLZ_PLACES = list(pd.read_csv("./helper_data/PLZ_Ortschaften.csv",sep=";",decimal=",")["Ortschaftsname"].drop_duplicates().str.lower())
 
@@ -98,7 +113,7 @@ except:
     raise OSError("Spacy model 'de_core_news_sm' not found. Download the modell first.")
 
 
-def _is_ordinal_context(text: str, start: int, end: int) -> bool:
+def _is_ordinal_context(text: str, start: int, end: int):
     """
     Use Spacy NLP to verify if a number with period is used as an ordinal in German.
     German ordinals are typically preceded by a determiner/article (e.g., "der 2.", "die 1.")
@@ -128,14 +143,24 @@ def _is_ordinal_context(text: str, start: int, end: int) -> bool:
             break
     
     if ordinal_token is None:
-        return False 
+        return False,None
     
     prev_token = ordinal_token.nbor(-1) if ordinal_token.i > 0 else None
     if prev_token and prev_token.pos_ in ["DET", "ADP"]:
-        # TODO Add more infos to get the variation of the ordinal token
-        return True
+        try:
+            declension_type = get_declension_type(ordinal_token)
+            gender = ordinal_token.morph.get("Gender")[0]
+            case = ordinal_token.morph.get("Case")[0]
+
+            if ordinal_token.morph.get("Number") == ["Plur"]:
+                gender = "Plur"
+            return True,{"declension":declension_type.lower(),"gender":gender.lower(),"case":case.lower()}
+
+        except:
+            return False,None
+            
     
-    return False
+    return False,None
 
 
 def _has_place_after(text: str, end: int) -> bool:
@@ -204,8 +229,17 @@ def _add_matches(text: str, regex, kind: NumberKind, out: List[NumberSpan]):
     for m in regex.finditer(text):
         # Special handling for ordinals: verify with Spacy
         if kind == "ORDINAL":
-            if not _is_ordinal_context(text, m.start(), m.end()):
+            is_ordinal, type_of_ordinal = _is_ordinal_context(text, m.start(), m.end())
+            if not is_ordinal:
                 continue  # Skip this match if it's not a true ordinal
+            else:
+                out.append(NumberSpan(
+                    kind=kind,
+                    text=m.group(0),
+                    start=m.start(),
+                    end=m.end(),
+                    value=type_of_ordinal
+                ))
         
         out.append(NumberSpan(
             kind=kind,
@@ -237,8 +271,20 @@ def detect_number_spans(text: str) -> List[NumberSpan]:
                         
                     elif timex["type"] in ["DATE"]:
                         value = timex.get("value")
-                        value_to_append= extract_time_from_timex(value)
-                    spans.append(NumberSpan(kind=timex["type"], text=timex.get("text", text[s:e]), start=s, end=e,value=value_to_append))
+                        # Remove leading "Jahr " only if followed by a full year
+                        m_start = re.match(r"^Jahr\s+(?=\d{4}\b)", timex["text"])
+                        if m_start:
+                            delta = m_start.end()
+                            s += delta
+
+                        # Remove trailing " Jahr" only if preceded by a full year
+                        m_end = re.search(r"(?<=\b\d{4})\s+Jahr$", timex["text"])
+                        if m_end:
+                            delta = len(timex["text"]) - m_end.start()
+                            e -= delta
+
+                        value_to_append= extract_date_parts(value)
+                    spans.append(NumberSpan(kind=timex["type"], text=timex.get("text"), start=s, end=e,value=value_to_append))
     except Exception:
         pass
 
@@ -323,48 +369,43 @@ def convert_numbers(text: str,dialect) -> str:
                 number += " " + num2words(digit, lang=dialect) 
 
         elif span.kind == "ORDINAL":
-            number = num2words(number[:-1], lang=dialect, ordinal=True)
+            number = num2words(number[:-1], lang=dialect, ordinal=True,declension=span.value)
 
         elif span.kind == "TIME":
                 hours = span.value.get("HOUR")
                 minutes = span.value.get("MINUTE")
                 seconds = span.value.get("SECOND")
+                if (minutes == 25) or (minutes >= 30):
+                    hours += 1
+                if hours > 12:
+                    hours -= 12
+                number = num2words(hours, to="hours", lang=dialect)
 
-                time_str = num2words(hours, to="hours", lang=dialect)
-                
-                # Convert minutesa
+                # Convert minutes
                 if minutes > 0:
-                    if minutes in [5,10,15,20]:
-                        time_str = num2words(minutes, to="minutes", lang=dialect) + " " + time_str
-                    
-                    elif minutes in [25,30, 35,40,45,50,55]:
-                        time_str +=  num2words(minutes, to="minutes", lang=dialect) + " " + num2words(hours + 1, to="hours", lang=dialect)
-                    elif minutes < 30:
-                        time_str += " " + num2words(minutes, lang=dialect)
-                    elif minutes > 30:
-                        time_str += " " + num2words(60 - minutes, lang=dialect)
+                    number = num2words(minutes, to="minutes", lang=dialect) + " " + number
+        
                 
                 # Convert seconds if present
                 if seconds is not None and seconds > 0:
-                    time_str += " " + num2words(seconds, lang=dialect) + num2words("sek",to="lookup", dialect="ch_bs")
+                    number += " " + num2words(seconds, lang=dialect) + num2words("sek",to="lookup", dialect="ch_bs")
                 
-                number = time_str
-
-        elif span.kind == "DATE": # TODO: improve date handling
+        elif span.kind == "DATE": # TODO: include declension
             value = span.value
             year = value.get("YEAR")
             month = value.get("MONTH")
             day = value.get("DAY")
             date_parts = []
-            if day is not None:
-                date_parts.append(num2words(day, lang=dialect, ordinal=True))
+            if day is not None:                
+                date_parts.append(num2words(day, lang=dialect, ordinal=True,declension= {'declension': 'gemischt', 'gender': 'masc', 'case': 'nom'}))
             if month is not None:
-                date_parts.append(num2words(month, lang=dialect))
+                date_parts.append(num2words(month, lang=dialect,to="month_dates"))
             if year is not None:
-                if int(number) > 1999:
-                    number = num2words(number, lang=dialect)
-                elif len(number) == 4:
-                    date_parts.append(num2words(number[:2], lang=dialect) + " " + num2words(number[2:], lang=dialect))
+                year = str(year)
+                if (len(year) == 4) and (int(year) <= 1999):
+                    date_parts.append(num2words(year[:2], lang=dialect) + " " + num2words(year[2:], lang=dialect))
+                else:
+                    date_parts.append(num2words(year, lang=dialect))
             number = " ".join(date_parts)
 
                     
@@ -372,3 +413,30 @@ def convert_numbers(text: str,dialect) -> str:
         out = out[:span.start] + number + out[span.end:]
 
     return out
+
+
+def get_declension_type(adj_token):
+    """
+    adj_token: spaCy-Token des Adjektivs/Ordinalwortes (z.B. 'zweite', 'dritte')
+    Rückgabe: 'weak', 'mixed', 'strong'
+    """
+    # Artikel zum Adjektiv suchen (im selben Nominalausdruck)
+    article = None
+    for child in adj_token.head.children:
+        if child.pos_ == "DET":
+            article = child
+            break
+
+    if article:
+        morph = article.morph
+        # bestimmter Artikel: der, die, das, dieser, jener, solcher, welcher
+        if "Definite=Def" in morph:
+            return "schwach"
+        # unbestimmter/possessiver Artikel: ein, kein, mein, dein, sein, ihr, unser, euer, Ihr
+        if "Definite=Ind" in morph:
+            return "gemischt"
+        # falls spaCy etwas Spezielles taggt
+        return "gemischt"
+    else:
+        # kein Artikel → starke Deklination
+        return "stark"

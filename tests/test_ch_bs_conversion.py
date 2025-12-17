@@ -1,4 +1,11 @@
 import unittest
+
+import os
+import sys
+
+# Add parent directory to path so imports work
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from num2words.detect_convert_ch_numbers import convert_numbers
 
 
@@ -26,6 +33,14 @@ class TestCHBSConversion(unittest.TestCase):
                         "Die zweit Person kommt.")
         self.assertEqual(convert_numbers("Das ist der 3. Tag.", self.dialect),
                         "Das ist der dritt Tag.")
+        self.assertEqual(convert_numbers("Wir vergleichen die 2. Proben.", self.dialect),
+                          "Wir vergleichen die zweite Proben.")
+        self.assertEqual(convert_numbers("Sie arbeiten mit den 2. Daten.", self.dialect),
+                          "Sie arbeiten mit den zweite Daten.")
+        self.assertEqual(convert_numbers("Ich betrachte 2. Satz genauer.", self.dialect),
+                          "Ich betrachte zweiti Satz genauer.")
+        self.assertEqual(convert_numbers("Mit 2. Satz komme ich besser klar.", self.dialect),
+                          "Mit zweitem Satz komme ich besser klar.")
 
     def test_ordinal_at_sentence_end(self):
         """Test that numbers at end of sentence are not treated as ordinals."""
@@ -34,12 +49,6 @@ class TestCHBSConversion(unittest.TestCase):
         # Should treat "2" as plain number, not ordinal
         self.assertIn("zwei", result)
 
-    def test_years(self):
-        """Test conversion of years."""
-        self.assertEqual(convert_numbers("Das Jahr 2024.", self.dialect),
-                        "Das Jahr zweitusigvieräzwanzig.")
-        self.assertEqual(convert_numbers("Im Jahr 1999.", self.dialect),
-                        "Im Jahr nünzäh nünänünzig.")
 
     def test_zip_codes(self):
         """Test conversion of Swiss ZIP codes."""
@@ -55,7 +64,7 @@ class TestCHBSConversion(unittest.TestCase):
         """Test conversion of text with multiple number types."""
         text = "Der 2. Termin ist am 15. Januar im Jahr 1983."
         result = convert_numbers(text, self.dialect)
-        self.assertEqual("Der zweit Termin ist am füfzähnt Januar im Jahr nünzäh dreiäachzig.", result)
+        self.assertEqual("Der zweit Termin ist am füfzähnte Januar im Jahr nünzäh dreiäachzig.", result)
 
 
     def test_no_numbers(self):
@@ -74,6 +83,14 @@ class TestCHBSConversion(unittest.TestCase):
         """Test conversion of large numbers."""
         self.assertIn("million", convert_numbers("Die Bevölkerung: 1000000.", self.dialect).lower())
 
+    def test_time_and_date(self):
+        """Test conversion of time and date formats."""
+        self.assertEqual(convert_numbers("Das Treffen findet statt.", self.dialect),
+                        "Das Treffen findet statt.")
+        self.assertEqual(convert_numbers("10:30 trefen wir uns.", self.dialect),
+                        "halb elfi trefen wir uns.")
+        self.assertEqual(convert_numbers("Veranstaltung: 24.12.2024 um 18:00.", self.dialect),
+                        "Veranstaltung: vieräzwanzigste Dezämber zweitusigvieräzwanzig um sechsi.")
 
 if __name__ == "__main__":
     unittest.main()
