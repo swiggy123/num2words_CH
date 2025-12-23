@@ -4,7 +4,7 @@ from typing import List, Literal, Optional, Dict
 import pandas as pd
 import spacy
 from num2words.num2words_CH import num2words
-from py_heideltime import heideltime
+from py_heideltime.py_heideltime import heideltime
 
 
 NumberKind = Literal[
@@ -256,12 +256,14 @@ def detect_number_spans(text: str) -> List[NumberSpan]:
         timexs = heideltime(
             text,
             language='german',
-            document_type='Scientific',
+            document_type='scientific',
             dct=None,
         )
         for timex in timexs:
             if "span" in timex and isinstance(timex["span"], (list, tuple)) and timex["type"] in ["DATE", "TIME"]:
                 s, e = timex["span"]
+                s -=1
+                e -=1
                 # Guard against invalid spans
                 if 0 <= s < e <= len(text):
                     if timex["type"] in ["TIME"]:
@@ -287,7 +289,6 @@ def detect_number_spans(text: str) -> List[NumberSpan]:
                     spans.append(NumberSpan(kind=timex["type"], text=timex.get("text"), start=s, end=e,value=value_to_append))
     except Exception:
         pass
-
     # Specific types first
     _add_matches(text, PHONE_RE, "PHONE", spans)
     #_add_matches(text, CAR_PLATE_RE, "CAR_PLATE", spans)
@@ -310,8 +311,23 @@ def detect_number_spans(text: str) -> List[NumberSpan]:
     #_add_matches(text, MODEL_RE, "MODEL", spans)
     _add_matches(text, PLAIN_NUMBER_RE, "NUMBER", spans)
 
-    # --- overlap resolution as before ---
-    spans.sort(key=lambda s: (s.start, -(s.end - s.start)))
+    # --- overlap resolution with priority ---
+    # Priority order: DATE/TIME > PHONE > ZIP > ORDINAL > NUMBER
+    KIND_PRIORITY = {
+        "DATE": 0,
+        "TIME": 0,
+        "PHONE": 1,
+        "ZIP": 2,
+        "ORDINAL": 3,
+        "YEAR": 4,
+        "MONEY": 5,
+        "CAR_PLATE": 6,
+        "MODEL": 7,
+        "NUMBER": 8,
+    }
+    
+    # Sort by: priority first, then start position, then longest span
+    spans.sort(key=lambda s: (KIND_PRIORITY.get(s.kind, 99), s.start, -(s.end - s.start)))
 
     filtered: List[NumberSpan] = []
     for span in spans:
@@ -319,7 +335,7 @@ def detect_number_spans(text: str) -> List[NumberSpan]:
         if any(span.start >= s.start and span.end <= s.end for s in filtered):
             continue
 
-        # if overlapping partially with an earlier span, we keep the first one
+        # if overlapping partially with an earlier span, we keep the first one (higher priority)
         if any(not (span.end <= s.start or span.start >= s.end) for s in filtered):
             continue
 

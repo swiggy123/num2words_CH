@@ -83,7 +83,7 @@ class Num2Word_CH_SG(Num2Word_EU):
                      "drei": "drit",
                      "acht": "ach",
                      "sieben": "sib",
-                     "ig": "igs",
+                     "zg": "zgs",
                      "ert": "erts",
                      "end": "ends",
                      "ion": "ions",
