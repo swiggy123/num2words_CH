@@ -23,7 +23,7 @@ import re
 from .lang_EU import Num2Word_EU
 
 
-class Num2Word_CH_BS(Num2Word_EU):
+class Num2Word_CH_SG(Num2Word_EU):
     CURRENCY_FORMS = {
         'EUR': (('Euro', 'Euro'), ('Cent', 'Cent')),
         'GBP': (('Pfund', 'Pfund'), ('Penny', 'Pence')),
@@ -36,8 +36,9 @@ class Num2Word_CH_BS(Num2Word_EU):
     MEGA_SUFFIX = "illion"
 
     def setup(self):
-        self.ordinal_declension = pd.read_excel("./helper_data/numbers_helper.xlsx", sheet_name="Ordinal_deklination")[["Deklination","Genus","Kasus", "Basel_short"]]
-        self.ordinal_declension.fillna("", inplace=True)
+        self.ordinal_declension = pd.read_excel("./helper_data/numbers_helper.xlsx", sheet_name="Ordinal_deklination"
+                                                )[["Deklination","Genus","Kasus", "St_Gallen_short"]]
+        
         self.ordinal_declension["Kasus"] = self.ordinal_declension["Kasus"].apply(str.lower)
         
         self.negword = "minus "
@@ -69,19 +70,19 @@ class Num2Word_CH_BS(Num2Word_EU):
         self.high_numwords = (
             ["zent"] + self.gen_high_numwords(units, tens, lows)
         )
-        self.mid_numwords = [(1000, "tusig"), (100, "hundärd"),
-                             (90, "nünzig"), (80, "achzig"), (70, "sibzig"),
-                             (60, "sächzig"), (50, "füfzig"),
-                             (40, "vierzig"), (30, "drissig")]
-        self.low_numwords = ["zwanzig", "nünzäh", "achzäh", "siebzäh",
+        self.mid_numwords = [(1000, "tuusig"), (100, "hundert"),
+                             (90, "nünzg"), (80, "achzg"), (70, "siebezg"),
+                             (60, "sechzg"), (50, "füfzg"),
+                             (40, "vierzg"), (30, "driisg")]
+        self.low_numwords = ["zwanzg", "nünzäh", "achzäh", "siebzäh",
                              "sechzäh", "füfzäh", "vierzäh", "drizäh",
                              "zwölf", "elf", "zäh", "nün", "acht",
-                             "siebe", "sechs", "fünf", "vier", "drei",
+                             "siebe", "sechs", "füf", "vio", "drü",
                              "zwei", "eis", "null"]
         self.ords = {"eis": "ers",
                      "drei": "drit",
                      "acht": "ach",
-                     "sieben": "sieb",
+                     "sieben": "sib",
                      "ig": "igs",
                      "ert": "erts",
                      "end": "ends",
@@ -93,22 +94,23 @@ class Num2Word_CH_BS(Num2Word_EU):
                      "ärd": "ärds",
                      "rdä": "rdäs"}
         
-        self.minutes = {
-                        15: "viertl ab",
+        self.minutes = { 
+                        15: "viertlab",
                         25: "fünf vor halb",
-                        30: "halb",
+                        30: "halbi",
                         35: "fünf ab halb",
                         45: "viertl vor"}
+        
         self.hours = {1: "eis",
                       2: "zwei",
-                        3: "drei",
+                        3: "drü",
                         4: "vieri",
-                        5: "fünfi",
+                        5: "füfi",
                         6: "sechsi",
                         7: "sibni",
                         8: "achti", 
                         9: "nüni",
-                        10: "zähni",
+                        10: "zäni",
                         11: "elfi",
                         12: "zwölfi"}
         self.month_dates = {
@@ -120,10 +122,10 @@ class Num2Word_CH_BS(Num2Word_EU):
             6: "Juni",
             7: "Juli",
             8: "August",
-            9: "Septämber",
-            10: "Oktober",
-            11: "Novämber",
-            12: "Dezämber"}
+            9: "Septämbor",
+            10: "Oktobor",
+            11: "Novämbor",
+            12: "Dezämbor"}
         
     def merge(self, curr, next):
         ctext, cnum, ntext, nnum = curr + next
@@ -164,7 +166,7 @@ class Num2Word_CH_BS(Num2Word_EU):
                 outword = outword[:len(outword) - len(key)] + self.ords[key]
                 break
         mask = (self.ordinal_declension["Deklination"] == declension["declension"]) & (self.ordinal_declension["Genus"] == declension["gender"]) & (self.ordinal_declension["Kasus"] == declension["case"])
-        res = outword + "t" + self.ordinal_declension[mask]["Basel_short"].values[0]
+        res = outword + "t" + self.ordinal_declension[mask]["St_Gallen_short"].values[0]
         # Exception: "hundertste" is usually preferred over "einhundertste"
         if res == "eitusigssti" or (res == "eihundärdsti"):
             res = res.replace("ei", "", 1)
@@ -193,9 +195,9 @@ class Num2Word_CH_BS(Num2Word_EU):
         if val in self.minutes:
             return self.minutes[val]
         elif val < 30:
-            return self.to_cardinal(val) + " ab"
+            return self.to_cardinal(val) + "ab"
         elif (val > 30) and (val < 60):
-            return self.to_cardinal(60 - val) + " vor"
+            return self.to_cardinal(60 - val) + "vor"
     def to_hours(self, val):
         if val in self.hours:
             return self.hours[val]
@@ -205,10 +207,10 @@ class Num2Word_CH_BS(Num2Word_EU):
 
     def to_lookup(self, val):
         if val == "sek":
-            return "sekundä"
+            return "sekunde"
     
     def to_year(self, val, longval=True):
         if not (val // 100) % 10:
             return self.to_cardinal(val)
-        return self.to_splitnum(val, hightxt="hundärt", longval=longval)\
+        return self.to_splitnum(val, hightxt="hundert", longval=longval)\
             .replace(' ', '')
